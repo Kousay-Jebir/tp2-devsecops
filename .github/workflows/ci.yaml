@@ -43,3 +43,66 @@ jobs:
           name: notes-app-image
           path: /tmp/notes-app.tar
           retention-days: 1
+  sast:
+    name: SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1st bandit run: full HTML report (all severities), never fails
+      # 2nd bandit run: the gate, fails only on HIGH severity findings
+      - name: Run Bandit
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src python:3.12-slim sh -c "
+            pip install --quiet --no-cache-dir bandit==1.8.6 &&
+            bandit -r . -x ./tests -f html -o bandit-report.html --exit-zero &&
+            bandit -r . -x ./tests --severity-level high"
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.html
+
+  sca:
+    name: SCA (OWASP Dependency-Check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The NVD database is large: keep it between runs
+      - name: Cache NVD database
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dc-data-${{ github.run_id }}
+          restore-keys: dc-data-
+
+      # --failOnCVSS 7: fails on High (7.0-8.9) and Critical (9.0-10) vulnerabilities
+      - name: Run Dependency-Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          mkdir -p ~/.dependency-check-data reports
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD:/src:ro" \
+            -v "$HOME/.dependency-check-data:/usr/share/dependency-check/data" \
+            -v "$PWD/reports:/report" \
+            owasp/dependency-check:13.0.0 \
+            --project notes-app \
+            --scan /src/requirements.txt \
+            --enableExperimental \
+            --disableOssIndex \
+            --nvdApiKey "$NVD_API_KEY" \
+            --format HTML --format JSON \
+            --out /report \
+            --failOnCVSS 7
+
+      - name: Upload Dependency-Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/
