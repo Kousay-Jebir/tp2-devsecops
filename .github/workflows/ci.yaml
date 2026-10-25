@@ -106,3 +106,71 @@ jobs:
         with:
           name: dependency-check-report
           path: reports/
+    dast:
+    name: DAST (OWASP ZAP)
+    runs-on: ubuntu-latest
+    needs: build-test
+    timeout-minutes: 20
+    steps:
+      - name: Download app image
+        uses: actions/download-artifact@v4
+        with:
+          name: notes-app-image
+          path: /tmp
+
+      - name: Load app image
+        run: docker load --input /tmp/notes-app.tar
+
+      # Ephemeral environment: a private Docker network + the app container,
+      # created for this job only and destroyed at the end
+      - name: Deploy app to ephemeral environment
+        run: |
+          docker network create dast-net
+          docker run -d --name notes-app --network dast-net notes-app:ci
+
+      - name: Wait for app to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' notes-app)
+            if [ "$status" = "healthy" ]; then echo "App is healthy"; exit 0; fi
+            sleep 2
+          done
+          echo "App did not become healthy"; docker logs notes-app; exit 1
+
+      # Full scan = spider + passive scan + active scan (real attacks: XSS, SQLi...)
+      # -I: don't fail on ZAP warnings, the gate is the next step (High only)
+      - name: Run ZAP full scan
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm --network dast-net -v "$PWD/zap:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-full-scan.py -t http://notes-app:5000 \
+              -m 1 \
+              -r zap-report.html -J zap-report.json \
+              -I \
+              -z "-config scanner.maxScanDurationInMins=5"
+
+      # Gate: riskcode 3 = High
+      - name: Fail on High risk alerts
+        run: |
+          echo "Alerts found by ZAP:"
+          jq -r '.site[].alerts[] | "  [\(.riskdesc)] \(.name)"' zap/zap-report.json
+          HIGH=$(jq '[.site[].alerts[] | select(.riskcode == "3")] | length' zap/zap-report.json)
+          if [ "$HIGH" -gt 0 ]; then
+            echo "::error::ZAP found $HIGH High risk alert(s)"
+            exit 1
+          fi
+          echo "No High risk alerts"
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap/
+
+      - name: Destroy ephemeral environment
+        if: always()
+        run: |
+          docker rm -f notes-app || true
+          docker network rm dast-net || true
