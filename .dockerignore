@@ -1,8 +1,9 @@
 .git
+.github
 .venv
 __pycache__/
 *.pyc
+.pytest_cache/
 notes.db
-*.pkl
-.gitignore
+docs/
 README.md

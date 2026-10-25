@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Notes App</title>
+</head>
+<body>
+    <h1>Notes</h1>
+
+    <form method="get" action="/">
+        <input name="q" value="{{ q }}" placeholder="Search by title">
+        <button type="submit">Search</button>
+    </form>
+    {% if q %}<p>Results for: {{ q }}</p>{% endif %}
+
+    <ul>
+        {% for note in notes %}
+        <li><strong>{{ note.title }}</strong>: {{ note.content }}</li>
+        {% else %}
+        <li>No notes.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>New note</h2>
+    <form method="post" action="/notes">
+        <input name="title" placeholder="Title" required>
+        <textarea name="content" placeholder="Content" required></textarea>
+        <button type="submit">Add</button>
+    </form>
+</body>
+</html>
