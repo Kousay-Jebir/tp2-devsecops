@@ -44,7 +44,9 @@ def index():
         (f"%{q}%",),
     ).fetchall()
     # render_template auto-escapes .html templates: user input never becomes HTML code
-    return render_template("index.html", notes=notes, q=q)
+    #introudce XSS vulnerability for demo purpose
+    highlight = f"<mark>{q}</mark>" if q else ""
+    return render_template("index.html", notes=notes, q=q, highlight=highlight)
 
 
 @app.route("/notes", methods=["POST"])
