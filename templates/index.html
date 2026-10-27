@@ -1,9 +1,11 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <title>Notes App</title>
 </head>
+
 <body>
     <h1>Notes</h1>
 
@@ -11,7 +13,7 @@
         <input name="q" value="{{ q }}" placeholder="Search by title">
         <button type="submit">Search</button>
     </form>
-    {% if q %}<p>Results for: {{ q }}</p>{% endif %}
+    {% if q %}<p>Results for: {{ highlight|safe }}</p>{% endif %}
 
     <ul>
         {% for note in notes %}
@@ -28,4 +30,5 @@
         <button type="submit">Add</button>
     </form>
 </body>
+
 </html>
